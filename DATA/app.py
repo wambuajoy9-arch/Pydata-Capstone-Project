@@ -206,29 +206,25 @@ elif page == "3. Active Enterprise Solutions":
 
 
 
-# GEOGRAPHIC MAP RENDERING
-
-import matplotlib.pyplot as plt
+# INTERACTIVE GEOGRAPHIC MAP RENDERING
 
 st.markdown("---")
-st.subheader("🗺️ Geographic Risk Hotspots")
+st.subheader("Interactive Geographic Risk Hotspots")
+mmerged_map = load_and_merge_data()
 
-# Set up the matplotlib figure
-fig, ax = plt.subplots(figsize=(10, 6))
+# Streamlit's built-in map expects 'latitude' and 'longitude' columns.
+# We extract the representative points from your GeoJSON geometry on the fly.
+if "latitude" not in merged_map.columns or "longitude" not in mmerged_map.columns:
+    # Safely calculate centroids for mapping coordinates
+    centroids = merged_map.geometry.centroid
+    merged_map["latitude"] = centroids.y
+    merged_map["longitude"] = centroids.x
 
-# Plot the map directly using your pipeline's merged_data variable
-merged_map.plot(
-    column="Deficit_Percentage", 
-    cmap="YlOrRd",      # yellow-to-red warning colors
-    legend=True, 
-    ax=ax, 
-    missing_kwds={"color": "lightgrey"}
+# Create a clean, interactive map that the judges can see you zoom and pan into
+st.map(
+    merged_map, 
+    latitude="latitude", 
+    longitude="longitude", 
+    size="Deficit_Percentage", # Bigger bubbles = higher risk anomalies
+    color="#FF4B4B"            # Bright alert red for anomalies
 )
-
-# Clean up the visualization layout
-ax.axis("off") 
-
-# Push the final map to your Streamlit screen
-st.pyplot(fig)
-
-

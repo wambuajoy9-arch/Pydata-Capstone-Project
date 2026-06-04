@@ -15,6 +15,8 @@ st.set_page_config(
 def load_and_process_data():
     # 1. Load the climate data using a raw string to protect Windows backslashes
     data = pd.read_csv("DATA/Kenya_Rainfall data.csv") 
+    data.columns = data.columns.str.strip()
+    data = data.rename(columns={'month':'Month'})
     
     # Standardize data PCODE column
     data["PCODE"] = data["PCODE"].astype(str).str.strip().str.upper()

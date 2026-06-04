@@ -1,306 +1,155 @@
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import pandas as pd
 import streamlit as st
-import numpy as np
-
-st.set_page_config(page_title="Kenya Climate Pipeline", layout="wide")
-
-# ── Refresh button (OUTSIDE cache, BEFORE data load) ──
-if st.sidebar.button(" Refresh Data"):
-    st.cache_data.clear()
-    st.rerun()
 
 @st.cache_data(ttl=3600)
 def load_and_process_data():
-    data = pd.read_csv("DATA/Kenya_Rainfall data.csv")
+    # 1. Load the climate data using a raw string to protect Windows backslashes
+    data = pd.read_csv("DATA/Kenya_Rainfall data.csv") 
+    
     data.columns = data.columns.str.strip()
-    data = data.rename(columns={'month': 'Month', 'year': 'Year'})
+    data = data.rename(columns={'month':'Month','year':'Year'})
+    
+    # Standardize data PCODE column
     data["PCODE"] = data["PCODE"].astype(str).str.strip().str.upper()
-
-    # ── DEBUG: return raw year/month range so we can verify ──
-    year_range = sorted(data["Year"].unique())
-    month_range = sorted(data["Month"].unique())
-
-    # Use actual data range instead of hardcoding 2022-2026
-    min_year = int(data["Year"].min())
-    max_year = int(data["Year"].max())
-
-    planting_season = data[
-        data["Month"].between(3, 5) &
-        data["Year"].between(min_year, max_year)
-    ].copy()
-
-    planting_season["seasonal_anomaly_score"] = (
-        planting_season["current_rainfall"] - planting_season["historical_rainfall_avg"]
-    )
-
-    # Cumulative Deficit
+    
+    # Isolate critical March-May planting season (2022-2026)
+    planting_season = data[data["Month"].between(3, 5) & data["Year"].between(2022, 2026)].copy()
+    planting_season["seasonal_anomaly_score"] = planting_season["current_rainfall"] - planting_season["historical_rainfall_avg"]
+    
+    # Cumulative Deficit Percentages
     PCODE_total = planting_season.groupby("PCODE").agg(
         Total_Actual=("current_rainfall", "sum"),
         Total_Expected=("historical_rainfall_avg", "sum")
     ).reset_index()
     PCODE_total["Deficit_mm"] = (PCODE_total["Total_Expected"] - PCODE_total["Total_Actual"]).clip(lower=0)
     PCODE_total["Deficit_Percentage"] = (PCODE_total["Deficit_mm"] / PCODE_total["Total_Expected"]) * 100
-
-    # Climate Whiplash
+    
+    # Climate Whiplash Standard Deviation
     PCODE_anomaly = planting_season.groupby(["PCODE", "Year"])["seasonal_anomaly_score"].sum().reset_index()
     PCODE_volatility = PCODE_anomaly.groupby("PCODE")["seasonal_anomaly_score"].std().reset_index()
     PCODE_volatility.columns = ["PCODE", "Whiplash_Score"]
-
-    # Yearly anomaly trend per PCODE (for sparklines)
-    yearly_trend = PCODE_anomaly.copy()
-
-    # Spatial join
+    
+    # Load your shapefile boundary map
     spatial_map = gpd.read_file("DATA/ken_admin2.geojson")
     cleaned_spatial_map = spatial_map.dropna(axis=1, how="all")
-    cleaned_spatial_map["adm2_pcode"] = cleaned_spatial_map["adm2_pcode"].astype(str).str.strip().str.upper()
-
+    
+    # Clean the PCODE columns to ensure a perfect string match
+    cleaned_spatial_map['adm2_pcode'] = (cleaned_spatial_map['adm2_pcode'].astype(str).str.strip().str.upper())
+    
     PCODE_total["PCODE"] = PCODE_total["PCODE"].astype(str).str.strip().str.upper()
     PCODE_volatility["PCODE"] = PCODE_volatility["PCODE"].astype(str).str.strip().str.upper()
 
     metrics_combined = pd.merge(PCODE_total, PCODE_volatility, on="PCODE", how="outer")
     merged_map = cleaned_spatial_map.merge(metrics_combined, left_on="adm2_pcode", right_on="PCODE", how="left")
-
+    
     merged_map["Whiplash_Score"] = merged_map["Whiplash_Score"].fillna(0)
     merged_map["Deficit_Percentage"] = merged_map["Deficit_Percentage"].fillna(0)
 
     possible_name_cols = ["shapeName", "adm2_en", "COUNTY", "county", "County", "adm2_name", "ADM2_EN", "NAME_2"]
     detected_name_col = next((col for col in possible_name_cols if col in merged_map.columns), None)
+    
     if detected_name_col:
         merged_map["County_Name"] = merged_map[detected_name_col].fillna(merged_map["adm2_pcode"])
     else:
         merged_map["County_Name"] = merged_map["adm2_pcode"]
+    
+    return merged_map
 
-    return merged_map, year_range, month_range, yearly_trend
-
-# ── Load data ──
+# Execute data engine
 try:
-    merged_map, year_range, month_range, yearly_trend = load_and_process_data()
+    merged_map = load_and_process_data()
 except Exception as e:
-    st.error(f"Configuration Error: {e}")
+    st.error(f"Configuration Error: Check file paths or file structure. Details: {e}")
     st.stop()
 
-# ── Sidebar navigation ──
-st.sidebar.title("Capstone Control Panel")
-st.sidebar.markdown("**Project:** Climate Vulnerability Early Warning Pipeline")
-st.sidebar.markdown("---")
+# MAIN INTERFACE
+st.title("Automated Spatial Climate Interventions")
+st.markdown("### Transitioning Insights into Live Operational Deliverables")
+st.markdown("---")
 
-# Data health check in sidebar
-with st.sidebar.expander("Data Health Check"):
-    st.write("**Years in dataset:**", year_range)
-    st.write("**Months in dataset:**", month_range)
-    st.write("**Rows in merged map:**", len(merged_map))
-    non_zero = (merged_map["Deficit_Percentage"] > 0).sum()
-    st.write(f"**PCODEs with non-zero deficit:** {non_zero}/{len(merged_map)}")
+# Global Interactive Dropdown
+county_list = sorted(merged_map["County_Name"].unique())
+selected_name = st.selectbox("Step 1: Select Target Region for Live Evaluation:", county_list)
 
-page = st.sidebar.radio(
-    "Select Interface Page:",
-    ["1. Project Overview & Diagnostics",
-     "2. Geographic Risk Hotspots",
-     "3. Active Enterprise Solutions"]
+# Extract structural metrics live based on drop-down choice
+county_row = merged_map[merged_map["County_Name"] == selected_name]
+target_pcode = county_row["adm2_pcode"].values[0]
+target_deficit = county_row["Deficit_Percentage"].values[0]
+target_whiplash = county_row["Whiplash_Score"].values[0]
+
+# ==========================================
+# NEW: LIVE GEOGRAPHIC RISK HOTSPOT MAP
+# ==========================================
+st.subheader("🗺️ Geographic Spatial Risk Hotspots")
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Plot the background map using climate risk data scale
+merged_map.plot(
+    column="Deficit_Percentage", 
+    cmap="YlOrRd", 
+    linewidth=0.5, 
+    ax=ax, 
+    edgecolor="0.6", 
+    legend=True,
+    legend_kwds={"label": "Cumulative Rainfall Deficit Index (%)", "orientation": "horizontal", "pad": 0.05}
 )
 
+# Highlight the user-selected target area with a distinct neon outline
+county_row.plot(ax=ax, facecolor="none", edgecolor="#00FFFF", linewidth=2.5, label="Selected Unit")
 
-# PAGE 1: OVERVIEW
+ax.set_axis_off()
+st.pyplot(fig)
+st.markdown("---")
 
-if page == "1. Project Overview & Diagnostics":
-    st.title("Kenya Climate Risk Dashboard")
-    st.markdown("### The Statistical Recovery Trap")
+# Solution Tabs
+tab1, tab2 = st.tabs(["Solution 1: Interactive Risk Analytics Engine", "Solution 2: Last-Mile Alert Dispatcher"])
+
+with tab1:
+    st.subheader("Solution 1: Dynamic Machine-Readable Risk Pipeline")
+    st.markdown("This backend processing block runs automated evaluations directly on PCODE spatial rows, bypassing misleading aggregate numbers.")
+    
+    # Display Live Metric Cards
+    m_col1, m_col2, m_col3 = st.columns(3)
+    m_col1.metric("Target PCODE Identifier", target_pcode)
+    m_col2.metric("Computed Cumulative Deficit", f"{target_deficit:.1f}%")
+    m_col3.metric("Computed Volatility Score", f"{target_whiplash:.1f}")
+    
+    # Interactive JSON API Simulation output
+    st.markdown("#### Simulated API Live Output Payload:")
+    json_output = {
+        "PCODE": str(target_pcode),
+        "Geographic_Name": str(selected_name),
+        "Deficit_Percentage": round(float(target_deficit), 2),
+        "Volatility_Index": round(float(target_whiplash), 2),
+        "System_Status": "CRITICAL_ACTION" if (target_deficit > 8.0 or target_whiplash > 250) else "STABLE"
+    }
+    st.json(json_output)
+
+with tab2:
+    st.subheader("Solution 2: Interactive Alert Formulation & Outbox")
+    st.markdown("This frontend deployment interface lets system administrators simulate thresholds and push alerts directly to local field agents.")
+    
+    # Slider interaction parameter
+    custom_threshold = st.slider(
+        "Adjust Critical Deficit Warning Cutoff Point (%)",
+        min_value=1.0, max_value=15.0, value=8.0, step=0.5
+    )
+    
     st.markdown("---")
-
-    st.markdown("""
-    #### Key Findings: Why Historical Averages Lie
-    - **The 2024 Illusion:** The massive positive spike represents extreme El Niño flooding.
-    - **The Recovery Trap:** This single surplus hides the severe deficits of surrounding years.
-    - **The Impact:** A flood and a drought do not cancel out — they represent *consecutive crop failures*.
-    """)
-
-    st.markdown("---")
-    st.subheader("National Anomaly Trend — Mar–May Planting Season")
-
-    # Build national diverging bar chart from yearly_trend
-    national_trend = yearly_trend.groupby("Year")["seasonal_anomaly_score"].mean().reset_index()
-    national_trend.columns = ["Year", "Avg_Anomaly"]
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    colors = ["#d32f2f" if v < 0 else "#1976d2" for v in national_trend["Avg_Anomaly"]]
-    bars = ax.bar(national_trend["Year"].astype(str), national_trend["Avg_Anomaly"], color=colors, edgecolor="white", linewidth=0.5)
-    ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
-    ax.set_title("Average Seasonal Rainfall Anomaly (Mar–May)", fontsize=13, fontweight="bold")
-    ax.set_ylabel("Anomaly (mm vs. historical avg)")
-    ax.set_xlabel("Year")
-
-    for bar, val in zip(bars, national_trend["Avg_Anomaly"]):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + (2 if val >= 0 else -8),
-                f"{val:.0f}", ha="center", va="bottom", fontsize=8, color="black")
-
-    fig.patch.set_facecolor("#f9f9f9")
-    ax.set_facecolor("#f9f9f9")
-    st.pyplot(fig)
-    st.info("Notice how a single massive surplus year visually dominates, masking drought severity in adjacent years.")
-
-
-# PAGE 2: SPATIAL HOTSPOT MAPS
-
-elif page == "2. Geographic Risk Hotspots":
-    st.title("Spatial Risk Hotspots — PCODE Mapping")
-    st.markdown("### Structural Deficits vs. Climate Whiplash Volatility")
-    st.markdown("---")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("Map A: Chronic Deficits")
-        st.markdown("*Multi-year cumulative rainfall shortfall as % of expected.*")
-        fig1, ax1 = plt.subplots(figsize=(6, 6))
-        merged_map.plot(column="Deficit_Percentage", cmap="YlOrRd", linewidth=0.4,
-                        ax=ax1, edgecolor="0.4", legend=True,
-                        legend_kwds={"label": "Missing Rain Budget (%)", "shrink": 0.7})
-        ax1.set_axis_off()
-        ax1.set_title("Cumulative Deficit %", fontsize=11, fontweight="bold")
-        st.pyplot(fig1)
-        st.warning("**Hotspot:** Coastal strip shows structural deficits exceeding 10% across planting seasons.")
-
-    with col2:
-        st.subheader("Map B: Climate Whiplash")
-        st.markdown("*Year-over-year volatility — drought-to-flood swing intensity.*")
-        fig2, ax2 = plt.subplots(figsize=(6, 6))
-        merged_map.plot(column="Whiplash_Score", cmap="Purples", linewidth=0.4,
-                        ax=ax2, edgecolor="0.4", legend=True,
-                        legend_kwds={"label": "Volatility Score (Std Dev)", "shrink": 0.7})
-        ax2.set_axis_off()
-        ax2.set_title("Climate Whiplash Score", fontsize=11, fontweight="bold")
-        st.pyplot(fig2)
-        st.success("**Hotspot:** Uasin Gishu looks safe on Map A but lights up here — massive unstable year-over-year swings.")
-
-    st.markdown("---")
-    st.subheader("Interactive County Drilldown")
-
-    # Interactive: click a county to see its anomaly time series
-    county_list = sorted(merged_map["County_Name"].dropna().unique())
-    selected_county = st.selectbox("Select a county to inspect its anomaly trend:", county_list)
-
-    selected_pcode = merged_map[merged_map["County_Name"] == selected_county]["adm2_pcode"].values[0]
-    county_trend = yearly_trend[yearly_trend["PCODE"] == selected_pcode].sort_values("Year")
-
-    if county_trend.empty:
-        st.warning(f"No planting season anomaly data found for **{selected_county}** (PCODE: {selected_pcode}). This county may not match any rainfall record.")
-    else:
-        fig3, ax3 = plt.subplots(figsize=(10, 3.5))
-        bar_colors = ["#d32f2f" if v < 0 else "#2e7d32" for v in county_trend["seasonal_anomaly_score"]]
-        ax3.bar(county_trend["Year"].astype(str), county_trend["seasonal_anomaly_score"],
-                color=bar_colors, edgecolor="white", linewidth=0.5)
-        ax3.axhline(0, color="black", linewidth=0.8, linestyle="--")
-        ax3.set_title(f"Mar–May Seasonal Anomaly — {selected_county} ({selected_pcode})",
-                      fontsize=12, fontweight="bold")
-        ax3.set_ylabel("Anomaly (mm)")
-        ax3.set_xlabel("Year")
-        fig3.patch.set_facecolor("#f9f9f9")
-        ax3.set_facecolor("#f9f9f9")
-        st.pyplot(fig3)
-
-        # Highlight map showing selected county
-        fig4, ax4 = plt.subplots(figsize=(6, 6))
-        merged_map.plot(color="#e0e0e0", linewidth=0.3, ax=ax4, edgecolor="0.5")
-        merged_map[merged_map["adm2_pcode"] == selected_pcode].plot(
-            color="#e53935", linewidth=1.5, ax=ax4, edgecolor="black"
-        )
-        ax4.set_axis_off()
-        ax4.set_title(f"Location: {selected_county}", fontsize=10)
-        st.pyplot(fig4)
-
-
-# PAGE 3: ENTERPRISE SOLUTIONS
-
-elif page == "3. Active Enterprise Solutions":
-    st.title("Automated Spatial Climate Interventions")
-    st.markdown("### Transitioning Insights into Live Operational Deliverables")
-    st.markdown("---")
-
-    county_list = sorted(merged_map["County_Name"].dropna().unique())
-    selected_name = st.selectbox("Step 1: Select Target Region for Live Evaluation:", county_list)
-
-    county_row = merged_map[merged_map["County_Name"] == selected_name]
-    target_pcode = county_row["adm2_pcode"].values[0]
-    target_deficit = county_row["Deficit_Percentage"].values[0]
-    target_whiplash = county_row["Whiplash_Score"].values[0]
-
-    tab1, tab2 = st.tabs(["Solution 1: Risk Analytics Engine", "Solution 2: Last-Mile Alert Dispatcher"])
-
-    with tab1:
-        st.subheader("Dynamic Machine-Readable Risk Pipeline")
-
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Target PCODE", target_pcode)
-        m_col2.metric("Cumulative Deficit", f"{target_deficit:.1f}%",
-                      delta="⚠ Critical" if target_deficit > 8 else "✅ Stable",
-                      delta_color="inverse" if target_deficit > 8 else "normal")
-        m_col3.metric("Volatility Score", f"{target_whiplash:.1f}",
-                      delta="⚠ High" if target_whiplash > 250 else "✅ Stable",
-                      delta_color="inverse" if target_whiplash > 250 else "normal")
-
-        st.markdown("#### Simulated API Live Output Payload:")
-        json_output = {
-            "PCODE": str(target_pcode),
-            "Geographic_Name": str(selected_name),
-            "Deficit_Percentage": round(float(target_deficit), 2),
-            "Volatility_Index": round(float(target_whiplash), 2),
-            "System_Status": "CRITICAL_ACTION" if (target_deficit > 8.0 or target_whiplash > 250) else "STABLE"
-        }
-        st.json(json_output)
-
-        # Mini anomaly chart for selected county
-        county_trend = yearly_trend[yearly_trend["PCODE"] == target_pcode].sort_values("Year")
-        if not county_trend.empty:
-            st.markdown("#### Anomaly History:")
-            fig5, ax5 = plt.subplots(figsize=(8, 2.5))
-            ax5.plot(county_trend["Year"], county_trend["seasonal_anomaly_score"],
-                     marker="o", color="#1565c0", linewidth=2)
-            ax5.axhline(0, color="red", linewidth=0.8, linestyle="--")
-            ax5.fill_between(county_trend["Year"], county_trend["seasonal_anomaly_score"], 0,
-                             where=county_trend["seasonal_anomaly_score"] < 0,
-                             alpha=0.3, color="red", label="Deficit")
-            ax5.fill_between(county_trend["Year"], county_trend["seasonal_anomaly_score"], 0,
-                             where=county_trend["seasonal_anomaly_score"] >= 0,
-                             alpha=0.3, color="green", label="Surplus")
-            ax5.legend(fontsize=8)
-            ax5.set_xlabel("Year")
-            ax5.set_ylabel("Anomaly (mm)")
-            fig5.patch.set_facecolor("#f9f9f9")
-            ax5.set_facecolor("#f9f9f9")
-            st.pyplot(fig5)
-
-    with tab2:
-        st.subheader("Interactive Alert Formulation & Outbox")
-
-        custom_threshold = st.slider(
-            "Adjust Critical Deficit Warning Cutoff (%)",
-            min_value=1.0, max_value=15.0, value=8.0, step=0.5
-        )
-        st.markdown("---")
-
-        if st.button("Execute System Diagnostic & Run Dispatch Pipeline"):
-            with st.spinner("Processing geospatial layer and assembling SMS payload..."):
-                if target_deficit >= custom_threshold:
-                    st.error(
-                        f"**SMS QUEUED (Priority: Critical) → {selected_name} Extension Officers:**\n\n"
-                        f"*EMERGENCY ALERT: PCODE {target_pcode} structural deficit has reached "
-                        f"{target_deficit:.1f}%, exceeding your threshold of {custom_threshold}%. "
-                        f"Discontinue regular planting guidelines. Deploy emergency irrigation assistance.*"
-                    )
-                elif target_whiplash > 250.0:
-                    st.warning(
-                        f"**SMS QUEUED (Priority: High Volatility) → {selected_name} Cooperatives:**\n\n"
-                        f"*ALERT: High volatility index ({target_whiplash:.1f}) detected. "
-                        f"Advise farming pools to pause planting or swap to short-cycle adaptive seeds.*"
-                    )
-                else:
-                    st.success(
-                        f"**SMS QUEUED (Priority: Normal) → {selected_name} Field Hubs:**\n\n"
-                        f"*STATUS: PCODE {target_pcode} parameters within safe bounds. "
-                        f"Proceed with standard seasonal baseline advice.*"
-                    )
-            st.toast("Alert compilation completed!", icon="✅")
-
+    
+    # Simulation button execution step
+    if st.button("Execute System Diagnostic & Run Dispatch Pipeline"):
+        with st.spinner("Processing geospatial layer coordinates and assembling SMS payload..."):
+            
+            # Rule Evaluation Logic Loop              
+            if target_deficit >= custom_threshold:
+                st.error(f"**SMS QUEUED (Priority: Critical) -> Route to {selected_name} Ext. Officers:**\n\n*'EMERGENCY ALERT: PCODE {target_pcode} structural deficit has reached {target_deficit:.1f}%, breaking your custom safety threshold of {custom_threshold}%. Discontinue regular planting guidelines. Immediately deploy regional economic cushions and emergency irrigation assistance.'*")
+            elif target_whiplash > 250.0:
+                st.warning(f"**SMS QUEUED (Priority: High Volatility) -> Route to {selected_name} Cooperatives:**\n\n*'ALERT: High weather volatility index ({target_whiplash:.1f}) detected. Active seasonal whiplash and planting false-starts present. Advise farming pools to pause immediate planting cycles or swap into short-cycle adaptive grain seeds.'*")
+            else:
+                st.success(f"**SMS QUEUED (Priority: Normal) -> Route to {selected_name} Field Hubs:**\n\n*'STATUS: PCODE {target_pcode} parameters are within safe bounds for this seasonal iteration. Proceed with standard baseline regional advice.'*")
+        
+        st.toast("Alert compilation process completed successfully!", icon="✅")

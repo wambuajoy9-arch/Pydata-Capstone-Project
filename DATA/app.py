@@ -13,9 +13,8 @@ st.set_page_config(
 # CACHED DATA LOADING 
 @st.cache_data
 def load_and_process_data():
-    # 1. Load the climate data  
-    
-    data = pd.read_csv("C:\Users\PC\Pydata-Capstone-Project\DATA\Kenya_Rainfall data.csv") 
+    # 1. Load the climate data using a raw string to protect Windows backslashes
+    data = pd.read_csv(r"C:\Users\PC\Pydata-Capstone-Project\DATA\Kenya_Rainfall data.csv") 
     
     # Standardize data PCODE column
     data["PCODE"] = data["PCODE"].astype(str).str.strip().str.upper()
@@ -24,51 +23,52 @@ def load_and_process_data():
     planting_season = data[data["Month"].between(3, 5)].copy()
     planting_season["seasonal_anomaly_score"] = planting_season["current_rainfall"] - planting_season["historical_rainfall_avg"]
     
-
     # Cumulative Deficit Percentages
     PCODE_total = planting_season.groupby("PCODE").agg(
         Total_Actual=("current_rainfall", "sum"),
         Total_Expected=("historical_rainfall_avg", "sum")
     ).reset_index()
     PCODE_total["Deficit_mm"] = (PCODE_total["Total_Expected"] - PCODE_total["Total_Actual"]).clip(lower=0)
-    PCODE_total["Deficit_Percentage"] = (PCODE_total["Deficit_mm"_mm"] / PCODE_total["Total_Expected"])*100
+    PCODE_total["Deficit_Percentage"] = (PCODE_total["Deficit_mm"] / PCODE_total["Total_Expected"]) * 100
     
-    # Climate Whiplash Standard Deviation
+    # Climate Whiplash Standard Deviation (Fixed Variable & Column Mismatches)
     PCODE_anomaly = planting_season.groupby(["PCODE", "Year"])["seasonal_anomaly_score"].sum().reset_index()
-    PCODE_volatility = yearly_anomaly.groupby("PCODE")["Anomaly"].std().reset_index()
-    PCODE_volatility.columns = ["seasonal_anomaly_score", "Whiplash_Score"]
-    # Load your shapefile boundary map
-    spatial_map = gpd.read_file("C:\Users\PC\Downloads\ken_admin_boundaries.geojson\ken_admin2.geojson")
-    # Only drops columns where all rows are completely empty
+    PCODE_volatility = PCODE_anomaly.groupby("PCODE")["seasonal_anomaly_score"].std().reset_index()
+    PCODE_volatility.columns = ["PCODE", "Whiplash_Score"]
+    
+    # Load your shapefile boundary map using a raw string
+    spatial_map = gpd.read_file(r"C:\Users\PC\Downloads\ken_admin_boundaries.geojson\ken_admin2.geojson")
+    
+    # Drops columns where all rows are completely empty
     cleaned_spatial_map = spatial_map.dropna(axis=1, how="all")
+    
     # Clean the PCODE columns to ensure a perfect string match
-
     cleaned_spatial_map['adm2_pcode'] = (cleaned_spatial_map['adm2_pcode'].astype(str).str.strip().str.upper())
     
     # Merge metrics cleanly onto spatial map rows
     merged_map = cleaned_spatial_map.merge(PCODE_volatility, left_on="adm2_pcode", right_on="PCODE", how="left")
+    merged_map = merged_map.merge(PCODE_total, left_on="adm2_pcode", right_on="PCODE", how="left")
+    
+    # Clean fillna targets to protect visualization engines from breaking
     merged_map["Whiplash_Score"] = merged_map["Whiplash_Score"].fillna(0)
-
-    
-    
     merged_map["Deficit_Percentage"] = merged_map["Deficit_Percentage"].fillna(0)
-
     
-    # Include human-readable names for UI drop-downs (adjust 'shapeName' to your county name column)
-    merged_map["County_Name"] = merged_map["shapeName"].fillna(merged_map["PCODE])
+    # Safely look for naming columns for human-readable drop-downs
+    name_col = "shapeName" if "shapeName" in merged_map.columns else "adm2_en"
+    merged_map["County_Name"] = merged_map[name_col].fillna(merged_map["adm2_pcode"])
     
     return merged_map
 
-# Load processed data layer
+# Execute and isolate loading errors on dashboard screen cleanly
 try:
     merged_map = load_and_process_data()
 except Exception as e:
-    st.error(f"Configuration Error: Check file paths for dataset and shapefile. Details: {e}")
+    st.error(f"Configuration Error: Check file paths or file structure. Details: {e}")
     st.stop()
 
 
-#  SIDEBAR NAVIGATION BAR 
-st.sidebar.title(" Capstone Control Panel")
+# SIDEBAR NAVIGATION BAR 
+st.sidebar.title("Capstone Control Panel")
 st.sidebar.markdown("**Project:** Climate Vulnerability Early Warning Pipeline")
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
@@ -76,48 +76,41 @@ page = st.sidebar.radio(
     ["1. Project Overview & Diagnostics", "2. Geographic Risk Hotspots", "3. Active Enterprise Solutions"]
 )
 
-
-
-# PAGE 1: GRAPH DIAGNOSTICS & OVERVIEW
+# PAGE 1: GRAPH DIAGNOSTICS & OVERVIEW (Clean single-chart layout)
 
 if page == "1. Project Overview & Diagnostics":
-    st.title(" Kenya Climate Diagnostics Dashboard")
-    st.markdown("### Question 1 - 3: The Breakdown of Historic Weather Baselines")
+    st.title("Kenya Climate Diagnostics Dashboard")
+    st.markdown("### The Core Problem: The Statistical Recovery Trap")
     st.markdown("---")
     
     st.markdown("""
-    #### Key Findings from Historical Timelines:
-    * **The Climate Rollercoaster:** National rainfall averages hide intense seasonal degradation. 
-    * **The Broken Season:** The critical March-to-May long rains planting window has fragmented, shifting crop schedules and reducing baseline predictability.
+    #### Key Findings: Why Historical Averages Lie
+    * **The 2024 Illusion:** The massive positive spike in our baseline analysis represents extreme El Niño flooding. 
+    * **The Recovery Trap:** Mathematically, this single massive surplus hides the severe deficits of the surrounding years, creating a false impression of regional security.
+    * **The Impact:** A green recovery on paper is a statistical trap. It treats a flood and a drought as if they cancel each other out, when in reality, they represent consecutive seasonal crop failures.
     """)
     
-    # Display your pre-saved charts (the heatmaps and bar charts you already created)
-    col1, col2 = st.columns(2)
-    with col1:
-        st.info(" Timeline Matrix (Seasonal Collapse)")
-        # st.image("your_heatmap_image.png", caption="Monthly Heatmap Matrix")
-    with col2:
-        st.info(" National Deviations (5-Year Rollercoaster)")
-        # st.image("your_barchart_image.png", caption="Diverging Trend Analysis")
-
-
-
+    st.markdown("---")
+    st.subheader("National Anomalies (The 5-Year Multi-Year Rollercoaster)")
+    
+    # PLACEHOLDER: Your code will dynamically generate or attach your diverging bar chart right below this line
+    st.info("Look closely at your first diverging bar chart: Notice how the massive 2024 El Niño flood visually breaks the baseline trend, masking the severe droughts of 2022 and 2026.")
 # PAGE 2: GEOGRAPHIC HOTSPOTS
 
 elif page == "2. Geographic Risk Hotspots":
-    st.title(" Question 4: Spatial Risk Hotspots (PCODE Mapping)")
+    st.title("Question 4: Spatial Risk Hotspots (PCODE Mapping)")
     st.markdown("### Structural Deficits vs. Climate Whiplash Volatility Indices")
     st.markdown("---")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader(" Map A: Chronic Deficits")
+        st.subheader("Map A: Chronic Deficits")
         st.markdown("*Identifies areas facing a direct multi-year drop in their total moisture allocation budget.*")
         
         fig1, ax1 = plt.subplots(figsize=(6, 5))
         merged_map.plot(
-            column="Percent_Deficit", cmap="YlOrRd", linewidth=0.4, 
+            column="Deficit_Percentage", cmap="YlOrRd", linewidth=0.4, 
             ax=ax1, edgecolor="0.4", legend=True,
             legend_kwds={"label": "Missing Planting Rain Budget (%)"}
         )
@@ -126,7 +119,7 @@ elif page == "2. Geographic Risk Hotspots":
         st.warning("**Hotspot Insight:** The Coastal strip missed out entirely on multi-year recovery loops, building structural data deficits exceeding 10%.")
 
     with col2:
-        st.subheader(" Map B: Climate Whiplash")
+        st.subheader("Map B: Climate Whiplash")
         st.markdown("*Identifies regions experiencing erratic structural volatility swings (Drought-to-Flood cycles).*")
         
         fig2, ax2 = plt.subplots(figsize=(6, 5))
@@ -137,29 +130,28 @@ elif page == "2. Geographic Risk Hotspots":
         )
         ax2.set_axis_off()
         st.pyplot(fig2)
-        st.success(" **Hotspot Insight:** High-yield grain baskets like **Uasin Gishu** look safe on Map A, but light up dramatically here due to massive, unstable year-over-year weather swings.")
-
+        st.success("**Hotspot Insight:** High-yield grain baskets like **Uasin Gishu** look safe on Map A, but light up dramatically here due to massive, unstable year-over-year weather swings.")
 
 
 # PAGE 3: INTERACTIVE SOLUTIONS
 
 elif page == "3. Active Enterprise Solutions":
-    st.title(" Automated Spatial Climate Interventions")
+    st.title("Automated Spatial Climate Interventions")
     st.markdown("### Transitioning Insights into Live Operational Deliverables")
     st.markdown("---")
     
-    # Global Interactive Selector used across both tabs
+    # Global Interactive Dropdown
     county_list = sorted(merged_map["County_Name"].unique())
-    selected_name = st.selectbox(" Step 1: Select Target Region for Live Evaluation:", county_list)
+    selected_name = st.selectbox("Step 1: Select Target Region for Live Evaluation:", county_list)
     
-    # Extract row parameters live based on selection
+    # Extract structural metrics live based on drop-down choice
     county_row = merged_map[merged_map["County_Name"] == selected_name]
-    target_pcode = county_row["PCODE"].values[0]
+    target_pcode = county_row["adm2_pcode"].values[0]
     target_deficit = county_row["Deficit_Percentage"].values[0]
     target_whiplash = county_row["Whiplash_Score"].values[0]
     
-    # Split solutions into distinct interactive tabs
-    tab1, tab2 = st.tabs([" Solution 1: Interactive Risk Analytics Engine", " Solution 2: Last-Mile Alert Dispatcher"])
+    # Separate operations cleanly into Solution 1 and Solution 2
+    tab1, tab2 = st.tabs(["Solution 1: Interactive Risk Analytics Engine", "📱 Solution 2: Last-Mile Alert Dispatcher"])
     
     with tab1:
         st.subheader("Solution 1: Dynamic Machine-Readable Risk Pipeline")
@@ -172,7 +164,7 @@ elif page == "3. Active Enterprise Solutions":
         m_col3.metric("Computed Volatility Score", f"{target_whiplash:.1f}")
         
         # Interactive JSON API Simulation output
-        st.markdown("####  Simulated API Live Output Payload:")
+        st.markdown("#### Simulated API Live Output Payload:")
         json_output = {
             "PCODE": str(target_pcode),
             "Geographic_Name": str(selected_name),
@@ -186,7 +178,7 @@ elif page == "3. Active Enterprise Solutions":
         st.subheader("Solution 2: Interactive Alert Formulation & Outbox")
         st.markdown("This frontend deployment interface lets system administrators simulate thresholds and push alerts directly to local field agents.")
         
-        # Interactivity Control Element: User sets custom trigger conditions
+        # Slider interaction parameter
         custom_threshold = st.slider(
             "Adjust Critical Deficit Warning Cutoff Point (%)",
             min_value=1.0, max_value=15.0, value=8.0, step=0.5
@@ -194,11 +186,11 @@ elif page == "3. Active Enterprise Solutions":
         
         st.markdown("---")
         
-        # Dispatch Simulation Engine Action Button
+        # Simulation button execution step
         if st.button("Execute System Diagnostic & Run Dispatch Pipeline"):
             with st.spinner("Processing geospatial layer coordinates and assembling SMS payload..."):
                 
-                # Evaluation Engine Logic Loop
+                # Rule Evaluation Logic Loop
                 if target_deficit >= custom_threshold:
                     st.error(f"**SMS QUEUED (Priority: Critical) -> Route to {selected_name} Ext. Officers:**\n\n*'EMERGENCY ALERT: PCODE {target_pcode} structural deficit has reached {target_deficit:.1f}%, breaking your custom safety threshold of {custom_threshold}%. Discontinue regular planting guidelines. Immediately deploy regional economic cushions and emergency irrigation assistance.'*")
                 elif target_whiplash > 250.0:

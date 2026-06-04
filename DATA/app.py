@@ -46,7 +46,8 @@ def load_and_process_data():
     
     # Clean the PCODE columns to ensure a perfect string match
     cleaned_spatial_map['adm2_pcode'] = (cleaned_spatial_map['adm2_pcode'].astype(str).str.strip().str.upper())
-    
+    metrics_combined = pd.merge(PCODE_total,PCODE_volatility,on='PCODE',how='outer')
+    merged_map = cleaned_spatial_map.merge(metrics_combined,left_on ='adm2_pcode',right_on='PCODE',how='left')
     # Merge metrics cleanly onto spatial map rows
     merged_map = cleaned_spatial_map.merge(PCODE_volatility, left_on="adm2_pcode", right_on="PCODE", how="left")
     merged_map = merged_map.merge(PCODE_total, left_on="adm2_pcode", right_on="PCODE", how="left")

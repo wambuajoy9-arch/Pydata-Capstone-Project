@@ -4,19 +4,13 @@ import pandas as pd
 import streamlit as st
 @st.cache_data(ttl=3600)
 def load_and_process_data():
-    # SIDEBAR
-    st.sidebar.title("Capstone Control Panel")
-    st.sidebar.markdown("**Project:** Climate Vulnerability Early Warning Pipeline")
-    st.sidebar.markdown("---")
-
-    if st.sidebar.button("Refresh Data"):  
-        st.cache_data.clear()
-        st.rerun()
-
-    page = st.sidebar.radio(...) 
+    
     # 1. Load the climate data using a raw string to protect Windows backslashes
     data = pd.read_csv("DATA/Kenya_Rainfall data.csv") 
+    
+    
     data.columns = data.columns.str.strip()
+
     data = data.rename(columns={'month':'Month','year':'Year'})
     
     # Standardize data PCODE column

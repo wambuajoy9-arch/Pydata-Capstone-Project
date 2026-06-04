@@ -190,7 +190,7 @@ elif page == "3. Active Enterprise Solutions":
         if st.button("Execute System Diagnostic & Run Dispatch Pipeline"):
             with st.spinner("Processing geospatial layer coordinates and assembling SMS payload..."):
                 
-                # Rule Evaluation Logic Loop
+                 # Rule Evaluation Logic Loop               
                 if target_deficit >= custom_threshold:
                     st.error(f"**SMS QUEUED (Priority: Critical) -> Route to {selected_name} Ext. Officers:**\n\n*'EMERGENCY ALERT: PCODE {target_pcode} structural deficit has reached {target_deficit:.1f}%, breaking your custom safety threshold of {custom_threshold}%. Discontinue regular planting guidelines. Immediately deploy regional economic cushions and emergency irrigation assistance.'*")
                 elif target_whiplash > 250.0:

@@ -54,10 +54,17 @@ def load_and_process_data():
     # Clean fillna targets to protect visualization engines from breaking
     merged_map["Whiplash_Score"] = merged_map["Whiplash_Score"].fillna(0)
     merged_map["Deficit_Percentage"] = merged_map["Deficit_Percentage"].fillna(0)
+
+    possible_name_cols = ["shapeName", "adm2_en", "COUNTY", "county", "County", "adm2_name", "ADM2_EN", "NAME_2"]
     
-    # Safely look for naming columns for human-readable drop-downs
-    name_col = "shapeName" if "shapeName" in merged_map.columns else "adm2_en"
-    merged_map["County_Name"] = merged_map[name_col].fillna(merged_map["adm2_pcode"])
+
+    detected_name_col = next((col for col in possible_name_cols if col in merged_map.columns), None)
+    
+    if detected_name_col:
+        merged_map["County_Name"] = merged_map[detected_name_col].fillna(merged_map["adm2_pcode"])
+    else:
+        # Emergency backup: if no name column is found, use the PCODE as the dropdown label
+        merged_map["County_Name"] = merged_map["adm2_pcode"]
     
     return merged_map
 

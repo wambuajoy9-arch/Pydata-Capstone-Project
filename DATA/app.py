@@ -48,9 +48,12 @@ def load_and_process_data():
     cleaned_spatial_map['adm2_pcode'] = (cleaned_spatial_map['adm2_pcode'].astype(str).str.strip().str.upper())
     metrics_combined = pd.merge(PCODE_total,PCODE_volatility,on='PCODE',how='outer')
     merged_map = cleaned_spatial_map.merge(metrics_combined,left_on ='adm2_pcode',right_on='PCODE',how='left')
-    # Merge metrics cleanly onto spatial map rows
-    merged_map = cleaned_spatial_map.merge(PCODE_volatility, left_on="adm2_pcode", right_on="PCODE", how="left")
-    merged_map = merged_map.merge(PCODE_total, left_on="adm2_pcode", right_on="PCODE", how="left")
+    
+    PCODE_total["PCODE"] = PCODE_total["PCODE"].astype(str).str.strip().str.upper()
+    PCODE_volatility["PCODE"] = PCODE_volatility["PCODE"].astype(str).str.strip().str.upper()
+
+    metrics_combined = pd.merge(PCODE_total, PCODE_volatility, on="PCODE", how="outer")
+    merged_map = cleaned_spatial_map.merge(metrics_combined, left_on="adm2_pcode", right_on="PCODE", how="left")
     
     # Clean fillna targets to protect visualization engines from breaking
     merged_map["Whiplash_Score"] = merged_map["Whiplash_Score"].fillna(0)

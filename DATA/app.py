@@ -82,7 +82,7 @@ target_whiplash = county_row["Whiplash_Score"].values[0]
 # ==========================================
 # NEW: LIVE GEOGRAPHIC RISK HOTSPOT MAP
 # ==========================================
-st.subheader("🗺️ Geographic Spatial Risk Hotspots")
+st.subheader("Geographic Spatial Risk Hotspots")
 
 fig, ax = plt.subplots(figsize=(10, 6))
 

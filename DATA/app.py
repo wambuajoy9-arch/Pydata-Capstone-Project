@@ -204,3 +204,31 @@ elif page == "3. Active Enterprise Solutions":
             
             st.toast("Alert compilation process completed successfully!", icon="✅")
 
+
+
+# GEOGRAPHIC MAP RENDERING
+
+import matplotlib.pyplot as plt
+
+st.markdown("---")
+st.subheader("🗺️ Geographic Risk Hotspots")
+
+# Set up the matplotlib figure
+fig, ax = plt.subplots(figsize=(10, 6))
+
+# Plot the map directly using your pipeline's merged_data variable
+merged_map.plot(
+    column="Deficit_Percentage", 
+    cmap="YlOrRd",      # yellow-to-red warning colors
+    legend=True, 
+    ax=ax, 
+    missing_kwds={"color": "lightgrey"}
+)
+
+# Clean up the visualization layout
+ax.axis("off") 
+
+# Push the final map to your Streamlit screen
+st.pyplot(fig)
+
+

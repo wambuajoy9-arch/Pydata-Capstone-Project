@@ -39,7 +39,7 @@ def load_and_process_data():
     PCODE_volatility.columns = ["PCODE", "Whiplash_Score"]
     
     # Load your shapefile boundary map using a raw string
-    spatial_map = gpd.read_file("DAT/ken_admin2.geojson")
+    spatial_map = gpd.read_file("DATA/ken_admin2.geojson")
     
     # Drops columns where all rows are completely empty
     cleaned_spatial_map = spatial_map.dropna(axis=1, how="all")

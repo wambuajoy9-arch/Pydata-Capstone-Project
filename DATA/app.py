@@ -14,7 +14,7 @@ st.set_page_config(
 @st.cache_data
 def load_and_process_data():
     # 1. Load the climate data using a raw string to protect Windows backslashes
-    data = pd.read_csv(r"C:\Users\PC\Pydata-Capstone-Project\DATA\Kenya_Rainfall data.csv") 
+    data = pd.read_csv("DATA/Kenya_Rainfall data.csv") 
     
     # Standardize data PCODE column
     data["PCODE"] = data["PCODE"].astype(str).str.strip().str.upper()
@@ -37,7 +37,7 @@ def load_and_process_data():
     PCODE_volatility.columns = ["PCODE", "Whiplash_Score"]
     
     # Load your shapefile boundary map using a raw string
-    spatial_map = gpd.read_file(r"C:\Users\PC\Downloads\ken_admin_boundaries.geojson\ken_admin2.geojson")
+    spatial_map = gpd.read_file("DAT/ken_admin2.geojson")
     
     # Drops columns where all rows are completely empty
     cleaned_spatial_map = spatial_map.dropna(axis=1, how="all")

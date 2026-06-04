@@ -160,7 +160,7 @@ elif page == "3. Active Enterprise Solutions":
     target_whiplash = county_row["Whiplash_Score"].values[0]
     
     # Separate operations cleanly into Solution 1 and Solution 2
-    tab1, tab2 = st.tabs(["Solution 1: Interactive Risk Analytics Engine", "📱 Solution 2: Last-Mile Alert Dispatcher"])
+    tab1, tab2 = st.tabs(["Solution 1: Interactive Risk Analytics Engine", " Solution 2: Last-Mile Alert Dispatcher"])
     
     with tab1:
         st.subheader("Solution 1: Dynamic Machine-Readable Risk Pipeline")
